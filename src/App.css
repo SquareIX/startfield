@@ -4,3 +4,82 @@
 .slide-copy{animation:slide-arrive .42s cubic-bezier(.2,.7,.2,1) both}.carousel-controls{position:relative;z-index:10}.carousel-dot{width:18px;height:3px;padding:0;border:0;background:#ffffff35;cursor:pointer;transition:width .25s,background .25s}.carousel-dot.active{width:36px;background:#b7e7c9}.carousel-arrow{display:grid;width:34px;height:34px;place-items:center;border:1px solid #ffffff35;background:transparent;color:#edf3eb;font-size:15px;cursor:pointer;transition:background .2s,border-color .2s,color .2s}.carousel-arrow:hover{border-color:#b7e7c9;background:#b7e7c9;color:#08110f}.ferrum-canvas{cursor:grab;touch-action:pan-y}.ferrum-canvas.is-dragging{cursor:grabbing}.ferrum-canvas.is-dragging canvas{filter:brightness(1.08)}@keyframes slide-arrive{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){.slide-copy{animation:none}.carousel-dot,.carousel-arrow{transition:none}}
 .carousel-autoplay{min-width:70px;border:1px solid #ffffff24;background:transparent;padding:8px 10px;color:#b7e7c9;font:8px ui-monospace,monospace;letter-spacing:1px;cursor:pointer;transition:background .2s,border-color .2s}.carousel-autoplay:hover{border-color:#b7e7c970;background:#b7e7c911}@media(max-width:640px){.carousel-autoplay{min-width:58px;padding:8px 7px;font-size:7px}.carousel-controls{gap:12px}.carousel-controls>div:first-child{gap:9px}}
 .carousel-timer{display:block;width:48px;height:1px;overflow:hidden;background:#ffffff20}.carousel-timer i{display:block;width:100%;height:100%;transform:scaleX(0);transform-origin:left;background:#b7e7c9}.carousel-timer.is-running i{animation:carousel-progress 9.5s linear forwards}@keyframes carousel-progress{to{transform:scaleX(1)}}@media(max-width:640px){.carousel-timer{display:none}}@media(prefers-reduced-motion:reduce){.carousel-timer.is-running i{animation:none;transform:scaleX(0)}}
+
+.boot-screen{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#050a08;color:#eef2ec;transition:opacity .5s ease}
+.boot-screen.is-leaving{opacity:0;pointer-events:none}
+.boot-inner{display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center}
+.boot-mark{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;letter-spacing:.24em}
+.boot-percent{font-family:ui-monospace,monospace;font-size:56px;line-height:1;letter-spacing:-.02em;color:#f2f0e7}
+.boot-percent span{font-size:26px;color:#b7e7c9}
+.boot-bar{width:220px;height:2px;background:#ffffff1c;overflow:hidden}
+.boot-bar i{display:block;height:100%;background:#b7e7c9;transition:width .25s ease}
+.boot-label{font-family:ui-monospace,monospace;font-size:9px;letter-spacing:.3em;color:#c8efd4}
+.boot-flower{display:inline-block;color:#b7e7c9;animation:loading-turn 8s linear infinite}
+.boot-sub{font-family:ui-monospace,monospace;font-size:7px;letter-spacing:.3em;color:#ffffff40}
+@media (prefers-reduced-motion:reduce){.boot-flower{animation:none}}
+.slide-copy-out{animation:slide-leave .2s ease-in both}
+@keyframes slide-leave{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-9px)}}
+@media (prefers-reduced-motion:reduce){.slide-copy-out{animation:none}}
+
+/* Light mode: .theme-light sits on <main>. Unlayered author rules beat the
+   Tailwind layered utilities, and class-substring selectors catch every
+   use of the dark palette without rewriting every className. */
+main.theme-light{background-color:#eef2ec;color:#16241c}
+.theme-light .ferrum-hero::before{background:radial-gradient(ellipse at 76% 44%,#b7e7c955,transparent 42%),radial-gradient(ellipse at 22% 77%,#5a9d7322,transparent 35%),linear-gradient(180deg,#ffffff00,#eef2ec00 65%)}
+.theme-light [class*="text-white"]{color:#16241c}
+.theme-light [class*="text-white/"]{color:rgb(22 36 28 / .66)}
+.theme-light input::placeholder{color:rgb(22 36 28 / .4)}
+.theme-light [class*="border-white/"]{border-color:rgb(22 36 28 / .16)}
+.theme-light [class*="bg-white/"]{background-color:rgb(22 36 28 / .04)}
+.theme-light [class*="bg-[#08110f]"]{background-color:#eef2ec}
+.theme-light [class*="bg-[#0c1714]"]{background-color:#e2eae1}
+.theme-light [class*="bg-[#0a1512]"]{background-color:#e6ede4}
+.theme-light [class*="bg-[#070d0b]"]{background-color:#dfe7dd}
+.theme-light [class*="bg-[#11201a]"]{background-color:#dce8d8}
+.theme-light [class*="bg-[#10221a]"]:hover{background-color:#d4e2d2}
+.theme-light [class*="text-[#f2f0e7]"]{color:#16241c}
+.theme-light [class*="text-[#f1f2ea]"]{color:#16241c}
+.theme-light [class*="text-[#b7e7c9]"]{color:#2e6b4c}
+.theme-light [class*="text-[#c8efd4]"]{color:#2e6b4c}
+.theme-light [class*="text-[#d7f0df]"]{color:#2e6b4c}
+.theme-light [class*="text-[#d7d1a1]"]{color:#7a6d2f}
+.theme-light [class*="border-[#b7e7c9]"]{border-color:rgb(46 107 76 / .45)}
+.theme-light [class*="border-[#a8d8b6]"]{border-color:rgb(46 107 76 / .5)}
+.theme-light [class*="border-[#d7d1a1]"]{border-color:rgb(122 109 47 / .4)}
+.theme-light [class*=" bg-[#b7e7c9]"]{background-color:#8fd0a8}
+.theme-light .ferrum-mark{border-color:#2e6b4c66;color:#2e6b4c}
+.theme-light .hud-card{border-color:#2e6b4c2e;background:#f4f8f2d9;box-shadow:0 16px 44px #2e6b4c22}
+.theme-light .hud-card-head{color:#16241caa}
+.theme-light .hud-card-head b{color:#2e6b4c}
+.theme-light .hud-memory svg path{stroke:#2e6b4c55}
+.theme-light .hud-memory svg circle{fill:#2e6b4c;filter:drop-shadow(0 0 3px #2e6b4c66)}
+.theme-light .hud-card-foot{color:#16241c70;border-top-color:#16241c14}
+.theme-light .hud-step{color:#16241ca6}
+.theme-light .hud-step i{border-color:#2e6b4c4a;color:#2e6b4c}
+.theme-light .hud-step:first-of-type i{background:#2e6b4c;color:#eef2ec}
+.theme-light .visual-halo{background:radial-gradient(circle,#8fd0a833,#5a9d7312 45%,transparent 70%)}
+.theme-light .visual-horizon::after{opacity:.5}
+.theme-light .model-orbit{border-color:#2e6b4c26}
+.theme-light .model-orbit-one::before{background:#2e6b4c;box-shadow:0 0 12px #2e6b4c88}
+.theme-light .model-orbit-two::before{background:#7a6d2f;box-shadow:0 0 12px #7a6d2f88}
+.theme-light .hud-ring{opacity:.4}
+.theme-light .hud-ring circle{stroke:#2e6b4c}
+.theme-light .hud-ring circle[fill]{fill:#2e6b4c}
+.theme-light .visual-label,.theme-light .visual-coordinates,.theme-light .visual-caption,.theme-light .visual-status{color:#16241c99}
+.theme-light .visual-label>span{border-color:#2e6b4c66;color:#2e6b4c}
+.theme-light .visual-label b{color:#2e6b4c}
+.theme-light .visual-label-right>span{border-color:#7a6d2f5e;color:#7a6d2f}
+.theme-light .pulse-dot{background:#2e6b4c;box-shadow:0 0 12px #2e6b4c88}
+.theme-light .carousel-dot{background:#16241c30}
+.theme-light .carousel-dot.active{background:#2e6b4c}
+.theme-light .carousel-arrow{border-color:#16241c35;color:#16241c}
+.theme-light .carousel-arrow:hover{border-color:#2e6b4c;background:#2e6b4c;color:#eef2ec}
+.theme-light .carousel-autoplay{color:#2e6b4c;border-color:#16241c24}
+.theme-light .carousel-autoplay:hover{border-color:#2e6b4c70;background:#2e6b4c11}
+.theme-light .carousel-timer{background:#16241c20}
+.theme-light .carousel-timer i{background:#2e6b4c}
+.theme-light .ferrum-canvas.is-dragging canvas{filter:brightness(.96)}
+.theme-light .ferrum-canvas::before{mix-blend-mode:multiply;background:repeating-linear-gradient(180deg,transparent 0 7px,#2e6b4c1b 8px 9px,transparent 10px 16px)}
+.theme-light .ferrum-canvas::after{mix-blend-mode:multiply;background:linear-gradient(90deg,transparent,#2e6b4c26 25%,#7a6d2f1b 70%,transparent)}
+.theme-light .model-loading{color:#16241c99}
+.theme-light .loading-flower{color:#2e6b4c}
