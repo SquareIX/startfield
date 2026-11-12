@@ -1,30 +1,50 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type * as Three from 'three'
-import angelPointCloud from './assets/angel.ply?url'
-import weaponPointCloud from './assets/weapon.ply?url'
+import robotPointCloud from './assets/points/robot.points.b64?url'
+import helmetPointCloud from './assets/points/helmet.points.b64?url'
+import boomboxPointCloud from './assets/points/boombox.points.b64?url'
+import drillPointCloud from './assets/points/drill.points.b64?url'
+import { loadPointCloud } from './points'
+import { ensureAudio, isMuted, playAssemble, playClick, playRunComplete, playSlideChange, setMuted } from './sound'
 import './App.css'
+
+function isPointCloudModel(src: string): boolean {
+  const lower = src.toLowerCase()
+  return lower.endsWith('.ply') || lower.endsWith('.b64')
+}
+
+// Structural view of a mesh/points node for scene traversal: the three.js
+// types put isMesh/isPoints on the concrete classes only, so the union
+// type cannot be probed directly.
+type DrawableObject = Three.Object3D & {
+  isMesh?: boolean
+  isPoints?: boolean
+  geometry: Three.BufferGeometry
+  material: Three.Material | Three.Material[]
+}
 
 type Mission = { id: string; goal: string; stage: string; status: 'running' | 'completed'; time: number }
 type FeatureSlide = { id: string; name: string; role: string; eyebrow: string; title: [string, string, string]; description: string; quote: string; model: string; accent: string; signal: string }
 
 const storageKey = 'ferrum-demo-runs-v1'
 const featureSlides: FeatureSlide[] = [
-  { id: 'core', name: 'Ferrum Core', role: 'ANDROID MULTI-TOOL', eyebrow: 'A RUST-POWERED TOOLBOX FOR ANDROID / 01', title: ['Every tool', 'for Android', 'in one place.'], description: 'Ferrum menyatukan utilitas Android dalam satu workbench: inspeksi perangkat, operasi file, diagnostik jaringan, dan automasi rutin.', quote: 'One fast workbench. Your Android, understood.', model: new URL('./assets/lily.glb', import.meta.url).href, accent: '#b7e7c9', signal: 'ANDROID · RUST' },
-  { id: 'device', name: 'Device Inspector', role: 'DEVICE DIAGNOSTICS', eyebrow: 'GET TO KNOW YOUR DEVICE / 02', title: ['Know your', 'device from', 'the inside.'], description: 'Ringkas informasi perangkat, storage, baterai, dan status sistem supaya pemeriksaan harian terasa cepat dan jelas.', quote: 'The right details, right when you need them.', model: angelPointCloud, accent: '#a9d6dc', signal: 'DEVICE · STATUS' },
-  { id: 'network', name: 'Network Lab', role: 'NETWORK UTILITIES', eyebrow: 'SEE WHAT YOUR CONNECTION IS DOING / 03', title: ['Read the', 'signals around', 'your device.'], description: 'Kumpulan utilitas jaringan untuk memeriksa koneksi dan memahami apa yang terjadi di sekitar perangkatmu.', quote: 'Make every connection easier to understand.', model: new URL('./assets/lily-gods.glb', import.meta.url).href, accent: '#d8c7e8', signal: 'NETWORK · DIAGNOSTICS' },
-  { id: 'automation', name: 'Automation Kit', role: 'REPEATABLE WORKFLOWS', eyebrow: 'LESS REPETITION, MORE MOMENTUM / 04', title: ['Make routine', 'operations', 'move faster.'], description: 'Susun langkah berulang jadi alur kerja yang konsisten, lalu jalankan dengan visibilitas yang tetap di tanganmu.', quote: 'Build a flow once. Make it yours every time.', model: weaponPointCloud, accent: '#e1d6a0', signal: 'AUTOMATION · WORKFLOWS' },
+  { id: 'core', name: 'Ferrum Core', role: 'ANDROID MULTI-TOOL', eyebrow: 'A RUST-POWERED TOOLBOX FOR ANDROID / 01', title: ['Every tool', 'for Android', 'in one place.'], description: 'Ferrum menyatukan utilitas Android dalam satu workbench: inspeksi perangkat, operasi file, diagnostik jaringan, dan automasi rutin.', quote: 'One fast workbench. Your Android, understood.', model: robotPointCloud, accent: '#b7e7c9', signal: 'ANDROID · RUST' },
+  { id: 'device', name: 'Device Inspector', role: 'DEVICE DIAGNOSTICS', eyebrow: 'GET TO KNOW YOUR DEVICE / 02', title: ['Know your', 'device from', 'the inside.'], description: 'Ringkas informasi perangkat, storage, baterai, dan status sistem supaya pemeriksaan harian terasa cepat dan jelas.', quote: 'The right details, right when you need them.', model: helmetPointCloud, accent: '#a9d6dc', signal: 'DEVICE · STATUS' },
+  { id: 'network', name: 'Network Lab', role: 'NETWORK UTILITIES', eyebrow: 'SEE WHAT YOUR CONNECTION IS DOING / 03', title: ['Read the', 'signals around', 'your device.'], description: 'Kumpulan utilitas jaringan untuk memeriksa koneksi dan memahami apa yang terjadi di sekitar perangkatmu.', quote: 'Make every connection easier to understand.', model: boomboxPointCloud, accent: '#d8c7e8', signal: 'NETWORK · DIAGNOSTICS' },
+  { id: 'automation', name: 'Automation Kit', role: 'REPEATABLE WORKFLOWS', eyebrow: 'LESS REPETITION, MORE MOMENTUM / 04', title: ['Make routine', 'operations', 'move faster.'], description: 'Susun langkah berulang jadi alur kerja yang konsisten, lalu jalankan dengan visibilitas yang tetap di tanganmu.', quote: 'Build a flow once. Make it yours every time.', model: drillPointCloud, accent: '#e1d6a0', signal: 'AUTOMATION · WORKFLOWS' },
 ]
 const suggestions = ['Show device overview', 'Check storage usage', 'Run a network check']
 
-function FlowerScene({ src, accent, label, onInteractionChange }: { src: string; accent: string; label: string; onInteractionChange: (active: boolean) => void }) {
+function FlowerScene({ src, accent, label, onInteractionChange, onModelReady }: { src: string; accent: string; label: string; onInteractionChange: (active: boolean) => void; onModelReady?: () => void }) {
   const mount = useRef<HTMLDivElement>(null)
   const [progress, setProgress] = useState(0)
   const [failed, setFailed] = useState(false)
   const [glitching, setGlitching] = useState(false)
 
   useEffect(() => {
-    const host = mount.current
-    if (!host) return
+    const hostNode = mount.current
+    if (!hostNode) return
+    const host: HTMLDivElement = hostNode
 
     let alive = true
     let frame = 0
@@ -34,6 +54,15 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
     let model: Three.Group | undefined
     let artifacts: Three.Group | undefined
     let isGlitching = false
+    let pointsUniforms: {
+      uTime: { value: number }
+      uGlitch: { value: number }
+      uAssemble: { value: number }
+      uYMin: { value: number }
+      uYMax: { value: number }
+      uSweepColor: { value: Three.Color }
+    } | undefined
+    let assembleStartAt: number | undefined
     let pointerActive = false
     let lastPointerX = 0
     let lastPointerY = 0
@@ -71,6 +100,7 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
         if (!alive) return
 
         scene = new THREE.Scene()
+        const clock = new THREE.Clock()
         const camera = new THREE.PerspectiveCamera(20, 1, 1.1, 100)
         camera.position.set(0, 1, 10)
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' })
@@ -138,7 +168,7 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
 
         const disposeObject = (objectRoot: Three.Object3D) => {
           objectRoot.traverse((object) => {
-            const drawable = object as Three.Mesh | Three.Points
+            const drawable = object as DrawableObject
             if (!drawable.isObject3D && !drawable.isPoints) return
             drawable.geometry.dispose()
             const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material]
@@ -160,10 +190,13 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
           model.rotation.x = -0.08
           const glitchUniforms = { time: { value: 0 }, strength: { value: 0 } }
           model.traverse((object) => {
-            const drawable = object as Three.Mesh | Three.Points
+            const drawable = object as DrawableObject
             if (!drawable.isMesh && !drawable.isPoints) return
             const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material]
             materials.forEach((material) => {
+              // Point-cloud materials carry their own shader patch (assemble
+              // + sweep + glitch); the generic patch below must not replace it.
+              if (material.userData.ferrumPoints) return
               material.onBeforeCompile = (shader) => {
                 shader.uniforms.uFerrumTime = glitchUniforms.time
                 shader.uniforms.uFerrumGlitch = glitchUniforms.strength
@@ -188,6 +221,7 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
           })
           scene.add(model)
           setProgress(100)
+          onModelReady?.()
         }
 
         const onProgress = (event: ProgressEvent<EventTarget>) => {
@@ -227,11 +261,93 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
             pointCloudRoot.add(drawable)
             onModelLoaded(pointCloudRoot)
           }, onProgress, onLoadError)
+        } else if (src.toLowerCase().endsWith('.b64')) {
+          try {
+            const cloud = await loadPointCloud(src, (loaded, total) => {
+              if (alive && total) setProgress(Math.round((loaded / total) * 100))
+            })
+            if (!alive) return
+            const geometry = new THREE.BufferGeometry()
+            geometry.setAttribute('position', new THREE.BufferAttribute(cloud.positions, 3))
+            geometry.setAttribute('color', new THREE.BufferAttribute(cloud.colors, 3))
+            const scatter = new Float32Array(cloud.count * 3)
+            const delays = new Float32Array(cloud.count)
+            for (let i = 0; i < cloud.count; i += 1) {
+              const theta = Math.random() * Math.PI * 2
+              const phi = Math.acos(2 * Math.random() - 1)
+              const radius = 0.55 + Math.random() * 1.05
+              scatter[i * 3] = Math.sin(phi) * Math.cos(theta) * radius
+              scatter[i * 3 + 1] = Math.cos(phi) * radius * 0.8
+              scatter[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius
+              delays[i] = Math.random()
+            }
+            geometry.setAttribute('aScatter', new THREE.BufferAttribute(scatter, 3))
+            geometry.setAttribute('aDelay', new THREE.BufferAttribute(delays, 1))
+            pointsUniforms = {
+              uTime: { value: 0 },
+              uGlitch: { value: 0 },
+              uAssemble: { value: 0 },
+              uYMin: { value: cloud.min[1] },
+              uYMax: { value: cloud.min[1] + cloud.size[1] },
+              uSweepColor: { value: new THREE.Color(accent) },
+            }
+            const uniforms = pointsUniforms
+            const material = new THREE.PointsMaterial({
+              vertexColors: true,
+              size: 0.016,
+              sizeAttenuation: true,
+              transparent: true,
+              opacity: 0.95,
+              depthWrite: false,
+              blending: THREE.AdditiveBlending,
+            })
+            material.toneMapped = false
+            material.userData.ferrumPoints = true
+            material.onBeforeCompile = (shader) => {
+              Object.assign(shader.uniforms, uniforms)
+              shader.vertexShader = shader.vertexShader
+                .replace('#include <common>', `#include <common>
+                  attribute vec3 aScatter;
+                  attribute float aDelay;
+                  uniform float uTime;
+                  uniform float uGlitch;
+                  uniform float uAssemble;
+                  uniform float uYMin;
+                  uniform float uYMax;
+                  varying float vSweep;
+                  varying float vAssemble;`)
+                .replace('#include <begin_vertex>', `#include <begin_vertex>
+                  float ferrumAssemble = clamp(uAssemble * 1.35 - aDelay * 0.35, 0.0, 1.0);
+                  ferrumAssemble = ferrumAssemble * ferrumAssemble * (3.0 - 2.0 * ferrumAssemble);
+                  transformed = mix(transformed + aScatter, transformed, ferrumAssemble);
+                  vAssemble = ferrumAssemble;
+                  float ferrumSlice = step(0.91, sin(transformed.y * 74.0 + uTime * 18.0));
+                  transformed.x += sin(uTime * 36.0 + transformed.y * 51.0) * 0.045 * uGlitch * ferrumSlice;
+                  float ferrumYNorm = clamp((transformed.y - uYMin) / max(uYMax - uYMin, 0.0001), 0.0, 1.0);
+                  vSweep = exp(-abs(ferrumYNorm - fract(uTime * 0.12)) * 18.0);`)
+              shader.fragmentShader = shader.fragmentShader
+                .replace('#include <common>', `#include <common>
+                  uniform vec3 uSweepColor;
+                  varying float vSweep;
+                  varying float vAssemble;`)
+                .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+                  float ferrumPointFade = smoothstep(0.5, 0.12, length(gl_PointCoord - vec2(0.5)));`)
+                .replace('#include <color_fragment>', `#include <color_fragment>
+                  diffuseColor.rgb += uSweepColor * vSweep * 0.55;
+                  diffuseColor.a *= ferrumPointFade * (0.2 + 0.8 * vAssemble);`)
+            }
+            material.customProgramCacheKey = () => 'ferrum-points-v1'
+            const drawable = new THREE.Points(geometry, material)
+            const pointCloudRoot = new THREE.Group()
+            pointCloudRoot.add(drawable)
+            assembleStartAt = clock.elapsedTime
+            onModelLoaded(pointCloudRoot)
+          } catch {
+            onLoadError()
+          }
         } else {
           new GLTFLoader().load(src, (gltf) => onModelLoaded(gltf.scene), onProgress, onLoadError)
         }
-
-        const clock = new THREE.Clock()
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
         const render = () => {
           if (!renderer || !scene || !alive) return
@@ -246,7 +362,7 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
             setGlitching(isGlitching)
           }
           model?.traverse((object) => {
-            const drawable = object as Three.Mesh | Three.Points
+            const drawable = object as DrawableObject
             if (!drawable.isMesh && !drawable.isPoints) return
             const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material]
             materials.forEach((material) => {
@@ -257,6 +373,13 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
               }
             })
           })
+          if (pointsUniforms) {
+            pointsUniforms.uTime.value = clock.elapsedTime
+            pointsUniforms.uGlitch.value = glitchStrength
+            pointsUniforms.uAssemble.value = reducedMotion
+              ? 1
+              : Math.min(1, Math.max(0, (clock.elapsedTime - (assembleStartAt ?? clock.elapsedTime)) / 1.6))
+          }
           if (model && !reducedMotion) {
             if (!pointerActive) model.rotation.y += delta * 0.16
             model.position.y = Math.sin(clock.elapsedTime * 0.45) * 0.025
@@ -282,7 +405,7 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
       host.removeEventListener('pointerup', handlePointerUp)
       host.removeEventListener('pointercancel', handlePointerUp)
       scene?.traverse((object) => {
-        const drawable = object as Three.Mesh | Three.Points
+        const drawable = object as DrawableObject
         if (drawable.isMesh || drawable.isPoints) {
           drawable.geometry.dispose()
           const materials = Array.isArray(drawable.material) ? drawable.material : [drawable.material]
@@ -292,7 +415,7 @@ function FlowerScene({ src, accent, label, onInteractionChange }: { src: string;
       renderer?.dispose()
       renderer?.domElement.remove()
     }
-  }, [src, accent, onInteractionChange])
+  }, [src, accent, onInteractionChange, onModelReady])
 
   return <div className={`ferrum-canvas${glitching ? ' is-glitching' : ''}`} ref={mount} aria-label={`Model 3D ${label} bisa diputar dan memiliki efek glitch`} role="img">
     {progress < 100 && !failed && <div className="model-loading"><span className="loading-flower">✳</span><span>MEMUAT MODEL · {progress}%</span></div>}
@@ -316,7 +439,27 @@ function App() {
   const [missions, setMissions] = useState<Mission[]>(readMissions)
   const [goal, setGoal] = useState('')
   const [toast, setToast] = useState('')
+  const [soundOn, setSoundOn] = useState(() => !isMuted())
   const timers = useRef<number[]>([])
+  const firstSlideRef = useRef(true)
+
+  useEffect(() => {
+    const unlock = () => ensureAudio()
+    window.addEventListener('pointerdown', unlock)
+    window.addEventListener('keydown', unlock)
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (firstSlideRef.current) {
+      firstSlideRef.current = false
+      return
+    }
+    playSlideChange()
+  }, [activeSlideIndex])
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(missions))
@@ -337,12 +480,14 @@ function App() {
     setMissions((current) => [mission, ...current].slice(0, 8))
     setGoal('')
     setToast('Ferrum memulai simulasi tool run.')
+    playClick()
     timers.current.push(window.setTimeout(() => updateMission(id, 'Checking module selection', 'running'), 900))
     timers.current.push(window.setTimeout(() => updateMission(id, 'Preparing local operation', 'running'), 1900))
     timers.current.push(window.setTimeout(() => updateMission(id, 'Running frontend simulation', 'running'), 3000))
     timers.current.push(window.setTimeout(() => {
       updateMission(id, 'Demo complete · preview ready', 'completed')
       setToast('Ferrum demo selesai. Run tersimpan di browser ini.')
+      playRunComplete()
     }, 4100))
     timers.current.push(window.setTimeout(() => setToast(''), 6500))
   }
@@ -350,12 +495,22 @@ function App() {
   function clearMissions() {
     setMissions([])
     setToast('Riwayat demo dibersihkan dari browser ini.')
+    playClick()
     timers.current.push(window.setTimeout(() => setToast(''), 3500))
   }
 
   const activeCount = missions.filter((mission) => mission.status === 'running').length
   const activeSlide = featureSlides[activeSlideIndex]
   const handleModelInteraction = useCallback((active: boolean) => setModelInteracting(active), [])
+  const handleModelReady = useCallback(() => playAssemble(), [])
+
+  function toggleSound() {
+    ensureAudio()
+    const next = !soundOn
+    setSoundOn(next)
+    setMuted(!next)
+    if (next) playClick()
+  }
 
   useEffect(() => {
     if (!autoPlay || modelInteracting || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -374,7 +529,10 @@ function App() {
       <header className="relative z-20 mx-auto flex h-[78px] w-[min(1320px,calc(100%-48px))] items-center justify-between border-b border-white/10">
         <a href="#home" className="flex items-center gap-3 text-[13px] font-semibold tracking-[.24em] text-white no-underline"><span className="ferrum-mark">Fe</span> FERRUM<span className="hidden text-[8px] font-normal tracking-[.3em] text-white/40 sm:inline">ANDROID MULTI-TOOL</span></a>
         <nav className="hidden items-center gap-9 text-[9px] uppercase tracking-[.2em] text-white/55 md:flex"><a className="transition hover:text-[#c8efd4]" href="#platform">Platform</a><a className="transition hover:text-[#c8efd4]" href="#modules">Modules</a><a className="transition hover:text-[#c8efd4]" href="#workspace">Workspace</a></nav>
-        <a href="#workspace" className="flex items-center gap-3 border border-[#a8d8b6]/50 px-4 py-2.5 text-[9px] uppercase tracking-[.14em] text-[#c8efd4] no-underline transition hover:bg-[#b7e7c9] hover:text-[#08110f]">Explore Ferrum <span>↗</span></a>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={toggleSound} aria-pressed={soundOn} className="border border-white/20 bg-transparent px-3 py-2.5 text-[9px] uppercase tracking-[.14em] text-white/60 transition hover:border-white/50 hover:text-white">Sound {soundOn ? 'on' : 'off'}</button>
+          <a href="#workspace" className="flex items-center gap-3 border border-[#a8d8b6]/50 px-4 py-2.5 text-[9px] uppercase tracking-[.14em] text-[#c8efd4] no-underline transition hover:bg-[#b7e7c9] hover:text-[#08110f]">Explore Ferrum <span>↗</span></a>
+        </div>
       </header>
 
       <section id="home" className="ferrum-hero relative mx-auto grid min-h-[690px] w-[min(1320px,calc(100%-48px))] items-center gap-7 py-12 lg:grid-cols-[.92fr_1.08fr] lg:py-10" aria-label="Ferrum Android toolkit carousel" aria-roledescription="carousel" onKeyDown={(event) => { if (event.key === 'ArrowRight') changeSlide(1); if (event.key === 'ArrowLeft') changeSlide(-1) }}>
@@ -390,12 +548,20 @@ function App() {
         <div className="ferrum-visual relative mx-auto grid h-[440px] w-full max-w-[660px] place-items-center lg:h-[590px]">
           <div className="visual-horizon" /><div className="visual-halo" />
           <div className="model-orbit model-orbit-one" /><div className="model-orbit model-orbit-two" /><div className="model-orbit model-orbit-three" />
-          <FlowerScene key={activeSlide.id} src={activeSlide.model} accent={activeSlide.accent} label={activeSlide.name} onInteractionChange={handleModelInteraction} />
+          <svg className="hud-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="48" fill="none" stroke="#b7e7c9" strokeOpacity=".22" strokeWidth=".3" />
+            <circle cx="50" cy="50" r="46.5" fill="none" stroke="#b7e7c9" strokeOpacity=".45" strokeWidth=".5" strokeDasharray="1.2 4.8" />
+            <g className="hud-ring-spin">
+              <circle cx="50" cy="50" r="44" fill="none" stroke="#b7e7c9" strokeOpacity=".8" strokeWidth=".5" strokeDasharray="14 264" />
+              <circle cx="50" cy="6" r="1" fill="#b7e7c9" />
+            </g>
+          </svg>
+          <FlowerScene key={activeSlide.id} src={activeSlide.model} accent={activeSlide.accent} label={activeSlide.name} onInteractionChange={handleModelInteraction} onModelReady={handleModelReady} />
           <div className="visual-label visual-label-top"><span>✳</span><div>{activeSlide.name.toUpperCase()} / 0{activeSlideIndex + 1}<br /><b>{activeSlide.role}</b></div></div>
           <div className="visual-label visual-label-right"><span>0{activeSlideIndex + 1}</span><div>FERRUM MODULE<br /><b>DRAG TO ROTATE</b></div></div>
           <div className="hud-card hud-memory"><div className="hud-card-head"><span>01 / DEVICE MAP</span><b>LOCAL</b></div><svg viewBox="0 0 126 52" aria-hidden="true"><path d="M10 33 36 15 57 35 82 12 115 24M36 15l10 28 36-31 13 35" /><circle cx="10" cy="33" r="3" /><circle cx="36" cy="15" r="3" /><circle cx="57" cy="35" r="3" /><circle cx="82" cy="12" r="3" /><circle cx="115" cy="24" r="3" /><circle cx="46" cy="43" r="2" /><circle cx="96" cy="47" r="2" /></svg><span className="hud-card-foot">ANDROID TOOLCHAIN</span></div>
           <div className="hud-card hud-plan"><div className="hud-card-head"><span>02 / {activeSlide.signal.split(' · ')[0]}</span><b>READY</b></div><div className="hud-step"><i>✓</i> Inspect device</div><div className="hud-step"><i>02</i> Choose a utility</div><div className="hud-step"><i>03</i> Run locally</div></div>
-          <div className="visual-coordinates">FERRUM / {activeSlide.role}<br />{activeSlide.model.toLowerCase().endsWith('.ply') ? 'PLY POINT CLOUD' : 'GLB MODEL'} · ANDROID</div>
+          <div className="visual-coordinates">FERRUM / {activeSlide.role}<br />{isPointCloudModel(activeSlide.model) ? 'POINT CLOUD' : 'GLB MODEL'} · ANDROID</div>
           <div className="visual-caption">FIG. 00{activeSlideIndex + 1} — {activeSlide.signal}</div>
           <div className="visual-status"><span className="pulse-dot" /> TOOLCHAIN READY</div>
         </div>

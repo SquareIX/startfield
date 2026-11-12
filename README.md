@@ -1,6 +1,12 @@
 # Ferrum · Android Multi-Tool by OichiDev
 
-Serverless-style SaaS landing page for Ferrum, a Rust-powered Android multi-tool. Built with React, TypeScript, Vite, Tailwind CSS 4, and Three.js. Its hero carousel mixes GLB meshes and PLY point clouds from `src/assets/`, automatically advancing every 9.5 seconds. Drag or touch the active model to rotate it; it resumes its slow automatic rotation when released.
+Serverless-style SaaS landing page for Ferrum, a Rust-powered Android multi-tool. Built with React, TypeScript, Vite, Tailwind CSS 4, and Three.js. Its hero carousel shows CC0 models as lightweight point clouds (see [ATTRIBUTION.md](ATTRIBUTION.md)), automatically advancing every 9.5 seconds. Drag or touch the active model to rotate it; it resumes its slow automatic rotation when released.
+
+## Live site
+
+Deployed with GitHub Pages on every push to `main` (see `.github/workflows/deploy.yml`):
+
+https://squareix.github.io/startfield/
 
 ## Run locally
 
