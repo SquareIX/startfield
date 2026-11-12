@@ -1,4 +1,5 @@
-// Loader for the quantized point-cloud data files in src/assets/points/.
+// Loader + preload cache for the quantized point-cloud data files in
+// src/assets/points/.
 //
 // Format (.points.b64, plain text so it stays git-friendly):
 //   line 1: JSON header {"count":N,"min":[x,y,z],"size":[sx,sy,sz]}
@@ -7,6 +8,9 @@
 //           then 3x uint8 colors.
 // Points were sampled off the surface of the source mesh (area-weighted),
 // so the file carries the shape with no triangles, textures, or materials.
+//
+// All models are fetched up front behind the boot screen and cached here,
+// so switching carousel slides never waits on the network.
 
 export type PointCloudData = {
   positions: Float32Array
@@ -20,6 +24,12 @@ type PointsHeader = {
   count: number
   min: [number, number, number]
   size: [number, number, number]
+}
+
+const cache = new Map<string, PointCloudData>()
+
+export function getCachedPointCloud(url: string): PointCloudData | undefined {
+  return cache.get(url)
 }
 
 function decodeBase64(text: string): Uint8Array {
@@ -54,28 +64,78 @@ export async function loadPointCloud(
   url: string,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<PointCloudData> {
+  const hit = cache.get(url)
+  if (hit) {
+    onProgress?.(1, 1)
+    return hit
+  }
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Failed to load point cloud: ${response.status}`)
   const total = Number(response.headers.get('content-length') ?? 0)
+  let text: string
   if (!response.body || !total) {
     onProgress?.(1, 1)
-    return parsePointCloud(await response.text())
+    text = await response.text()
+  } else {
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let loaded = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      loaded += value.length
+      onProgress?.(loaded, total)
+    }
+    const merged = new Uint8Array(loaded)
+    let offset = 0
+    for (const chunk of chunks) {
+      merged.set(chunk, offset)
+      offset += chunk.length
+    }
+    text = new TextDecoder().decode(merged)
   }
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let loaded = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    chunks.push(value)
-    loaded += value.length
-    onProgress?.(loaded, total)
+  const data = parsePointCloud(text)
+  cache.set(url, data)
+  return data
+}
+
+export async function preloadPointClouds(
+  urls: string[],
+  onProgress?: (fraction: number) => void,
+): Promise<void> {
+  const totals = new Array<number>(urls.length).fill(0)
+  const loaded = new Array<number>(urls.length).fill(0)
+  let doneCount = 0
+  const report = () => {
+    const totalBytes = totals.reduce((a, b) => a + b, 0)
+    const loadedBytes = loaded.reduce((a, b) => a + b, 0)
+    const fraction = totalBytes > 0 ? loadedBytes / totalBytes : doneCount / urls.length
+    onProgress?.(Math.min(1, fraction))
   }
-  const merged = new Uint8Array(loaded)
-  let offset = 0
-  for (const chunk of chunks) {
-    merged.set(chunk, offset)
-    offset += chunk.length
-  }
-  return parsePointCloud(new TextDecoder().decode(merged))
+  await Promise.all(urls.map(async (url, index) => {
+    await loadPointCloud(url, (l, t) => {
+      loaded[index] = l
+      totals[index] = t
+      report()
+    })
+    doneCount += 1
+    report()
+  }))
+}
+
+// Warm the three.js module during the boot screen so the first frame of
+// the scene renders without a module-fetch pause.
+export async function warmRenderer(): Promise<void> {
+  await import('three')
+}
+
+export async function preloadEverything(
+  urls: string[],
+  onProgress?: (fraction: number, label: string) => void,
+): Promise<void> {
+  await preloadPointClouds(urls, (fraction) => onProgress?.(fraction * 0.85, 'LOADING POINT DATA'))
+  onProgress?.(0.9, 'WARMING RENDERER')
+  await warmRenderer()
+  onProgress?.(1, 'READY')
 }
